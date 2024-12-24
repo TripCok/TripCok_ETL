@@ -1,9 +1,16 @@
 import boto3
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, TimestampType
 from pyspark.sql.functions import col
 from pyspark.sql import functions as F
-import pymysql
+import os
+
+
+# 환경변수 읽기
+db_url = os.getenv("DB_URL")
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+
 
 # Spark 세션 생성
 spark = SparkSession.builder \
@@ -18,7 +25,7 @@ folder_path="s3a://tripcok/processed_data/20241222/T/url=%2Fapi%2Fv1%2Fapplicati
 #df = spark.read.parquet(folder_path)
 
 schema = StructType([
-    StructField("requestTime", StringType(), True),
+    StructField("requestTime", TimestampType(), True),
     StructField("memberId", IntegerType(), True),
     StructField("groupAdminId", IntegerType(), True),
     StructField("applicationId", IntegerType(), True)
@@ -26,30 +33,32 @@ schema = StructType([
 
 jdbcDF = spark.read \
     .format("jdbc") \
-    .option("url", "jdbc:postgresql://13.209.89.20:5432/tripcok_db") \
+    .option("url", db_url) \
     .option("dbtable", "tripcok_db.requests") \
-    .option("user", "postgres") \
-    .option("password", "tripcok1234") \
+    .option("user", db_user) \
+    .option("password", db_password) \
     .load()
 
+jdbcDF1 = jdbcDF
 jdbcDF.show(truncate=False)
+jdbcDF.printSchema()
 
-jdbcDF.write \
+jdbcDF1.write \
     .format("jdbc") \
-    .option("url", "jdbc:postgresql://13.209.89.20:5432/tripcok_db") \
+    .option("url", db_url) \
     .option("dbtable", "tripcok_db.requests") \
-    .option("user", "postgres") \
-    .option("password", "tripcok1234") \
-    .mode("overwrite") \
+    .option("user", db_user) \
+    .option("password", db_password) \
+    .mode("append") \
     .save()
 
-jdbcDF = spark.read \
+jdbcDF2 = spark.read \
     .format("jdbc") \
-    .option("url", "jdbc:postgresql://13.209.89.20:5432/tripcok_db") \
+    .option("url", db_url) \
     .option("dbtable", "tripcok_db.requests") \
-    .option("user", "postgres") \
-    .option("password", "tripcok1234") \
+    .option("user", db_user) \
+    .option("password", db_password) \
     .load()
 
-jdbcDF.show(truncate=False)
+jdbcDF2.show(truncate=False)
 

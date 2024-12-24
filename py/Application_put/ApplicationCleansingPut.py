@@ -22,7 +22,6 @@ class ApplicationCleansingPut:
         # Spark 세션 생성
         self.spark = SparkSession.builder \
             .appName("Category Cleansing") \
-            .config("spark.driver.extraClassPath", "/home/ubuntu/spark/jars/mariadb-java-client-3.3.2.jar") \
             .getOrCreate()
 
     def get_schema(self):
@@ -73,23 +72,21 @@ class ApplicationCleansingPut:
         # Spark 세션 종료
         self.spark.stop()
 
+    def parse_arguments():
+        """
+        명령줄 인자를 처리하는 함수
+        """
+        parser = argparse.ArgumentParser(description="Logs Cleansing Pipeline")
+        parser.add_argument("--bucket", required=False, default="tripcok", help="S3 bucket name")
+        parser.add_argument("--folder", required=True, default=f"processed_data/", help="S3 folder path (prefix)")
+        parser.add_argument("--date", required=True, help="Execution date (YYYYMMDD)")
+        return parser.parse_args()
 
 # 실행 예제
 if __name__ == "__main__":
-    # KST 시간대 정의
-    KST = timezone(timedelta(hours=9))
-
-    # 현재 KST 날짜 가져오기
-    current_date = datetime.now(KST).strftime('%Y%m%d')
     
-    # 명령줄 인자 처리 
-    parser = argparse.ArgumentParser(description="Logs Cleansing Pipeline")
-    parser.add_argument("--bucket", required=False, default="tripcok", help="S3 bucket name")
-    parser.add_argument("--folder", required=True, default=f"processed_data/", help="S3 folder path (prefix)")
-    parser.add_argument("--date", required=True, help="Execution date (YYYYMMDD)")
-    
-    # parser 저장
-    args = parser.parse_args()
+    args = parser.arguments()
 
     app = ApplicationCleansingPut(bucket_name=args.bucket, folder_path=args.folder, execute_date=args.date)
+
     app.run()
