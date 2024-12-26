@@ -35,6 +35,9 @@ class LogsCleansing:
         self.spark = SparkSession.builder \
             .appName("Logs Cleansing") \
             .config("spark.jars", ",".join(jar_files)) \
+            .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
+            .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
+            .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
             .getOrCreate()
 
     def get_schema(self):
