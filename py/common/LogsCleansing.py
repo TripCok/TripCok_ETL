@@ -1,31 +1,40 @@
 import argparse
 import logging
-import re  # re 모듈 추가
-from datetime import datetime, timedelta, timezone
+import os
+import re
+from datetime import datetime
+
 import boto3
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Window
+from pyspark.sql.functions import udf, col, lit, concat, regexp_replace, current_timestamp, to_date, row_number
 from pyspark.sql.types import StructType, StructField, StringType, LongType
-from pyspark.sql.functions import udf, col, lit, concat, regexp_replace
+import glob
 
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
+
 
 class LogsCleansing:
     def __init__(self, bucket_name, folder_path, execute_date):
         # S3 클라이언트 초기화
         self.s3 = boto3.client('s3')
-        
+
         # S3 버킷과 폴더 경로 설정
         self.bucket_name = bucket_name
         self.folder_path = f"{folder_path}/{execute_date}/"
-        
+
         # 처리 날짜와 결과 경로 설정
         self.execute_date = execute_date
-        self.output_path = f"s3a://{self.bucket_name}/processed_data/{self.execute_date}/L/"
+        self.output_path = f"s3a://{self.bucket_name}/dm/cleansing_data/"
 
+        # Partition
+        self.partition_cols = ["cre_dtm", "url_method"]
+
+        jar_files = glob.glob("/Users/jeong/Desktop/spark_aws/*.jar")
         # Spark 세션 생성
         self.spark = SparkSession.builder \
             .appName("Logs Cleansing") \
+            .config("spark.jars", ",".join(jar_files)) \
             .getOrCreate()
 
     def get_schema(self):
@@ -52,16 +61,17 @@ class LogsCleansing:
         StructField("last_token", StringType(), True)
     ]))
     def classify_url_by_last_token_udf(url):
+
         # URL에서 마지막 토큰을 추출
-        last_token = url.rstrip("/").split("/")[-1]
+        last_token: str = url.rstrip("/").split("/")[-1]
 
         # 마지막 토큰이 숫자일 경우
         if re.fullmatch(r"\d+", last_token):
             # 숫자인 경우, 마지막 토큰을 포함한 앞부분 URL 반환
-            return "/".join(url.rstrip("/").split("/")[:-1]) + "/", last_token
+            return ("/".join(url.rstrip("/").split("/")[:-1]) + "/").replace("/", "_"), last_token
         else:
             # 숫자가 아닌 경우, 문자열을 포함한 전체 URL 반환
-            return url, None
+            return url.replace("/", "_"), None
 
     def load_files(self):
         # 지정된 폴더에서 모든 객체 리스트 가져오기 (S3에서 파일 목록을 조회)
@@ -73,38 +83,59 @@ class LogsCleansing:
             return []
 
         # JSON 파일 목록만 필터링하여 반환
-        files = [f"s3a://{self.bucket_name}/{obj['Key']}" for obj in response['Contents'] if obj['Key'].endswith('.json')]
-        
+        files = [f"s3a://{self.bucket_name}/{obj['Key']}" for obj in response['Contents'] if
+                 obj['Key'].endswith('.json')]
+
         # JSON 파일이 없다면 경고 메시지 출력
         if not files:
             logging.warning(f"No JSON files found in bucket '{self.bucket_name}' with prefix '{self.folder_path}'")
         return files
 
-    def process_file(self, path, schema):
-        logging.info(f"Processing file: {path}")
+    def process_file(self, paths, schema):
+        logging.info(f"Processing files: {paths}")
 
         # JSON 파일을 읽어 DataFrame 생성
-        df = self.spark.read.json(path, schema=schema)
-
-        # 데이터 확인 (옵션) - DataFrame의 일부 출력
-        df.show(truncate=False)
+        df = self.spark.read.json(paths, schema=schema)
 
         # URL에서 'http://' 제거
         df = df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
 
-        df.show(truncate=False)
-
         # URL을 처리하여 새로운 컬럼을 생성
         df = df.withColumn("url_part", self.classify_url_by_last_token_udf(col("url")).getItem("url_part")) \
-               .withColumn("pathParam", self.classify_url_by_last_token_udf(col("url")).getItem("last_token"))
+            .withColumn("pathParam", self.classify_url_by_last_token_udf(col("url")).getItem("last_token"))
 
-        # URL과 method를 결합하여 새로운 컬럼 'url_method' 생성 (사이에 '/' 추가)
-        df = df.withColumn("url_method", concat(col("url_part"), lit("/"), col("method")))
+        # URL과 method를 결합하여 새로운 컬럼 'url_method' 생성 (사이에 '/' 추가), etl 시간 기록
+        df = df.withColumn("url_method", concat(col("url_part"), lit("/"), col("method"))) \
+            .withColumn("cre_dtm", to_date(col("requestTime"))) \
+            .withColumn("etl_dtm", current_timestamp())
 
+        return df
+
+    def write(self, df):
+
+        # 데이터 확인 (옵션) - DataFrame의 일부 출력
         df.show(truncate=False)
 
+        # AWS 데이터가 있는지 없는지 검증
+        if self.check_s3_folder_exists():
+            self.deduplicate(df)
+
         # Parquet 형식으로 저장 (url_method로 파티셔닝, 5개의 파티션)
-        df.coalesce(5).write.mode("overwrite").partitionBy("url_method").parquet(self.output_path)
+        df.coalesce(5).write.mode("overwrite").partitionBy(self.partition_cols).parquet(self.output_path)
+
+    def deduplicate(self, new_df):
+        origin_df = self.spark.read.parquet(self.output_path)
+
+        union_df = origin_df.union(new_df)
+        grouping_df = Window.partitionBy("traceId").orderBy(col("etl_dtm").desc)
+        deduplicate_df = union_df.withColumn('row_no', row_number().over(grouping_df)) \
+            .filter(col("row_no") == 1).drop('row_no')
+        return deduplicate_df
+
+    def check_s3_folder_exists(self):
+        s3 = boto3.client('s3')
+        response = s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.output_path, Delimiter='/')
+        return 'Contents' in response or 'CommonPrefixes' in response
 
     def run(self):
         # 로그에 처리 시작 시간 기록
@@ -117,10 +148,9 @@ class LogsCleansing:
         files = self.load_files()
 
         # 각 파일 처리
-        for path in files:
-            print("****************")
-            print(path)
-            self.process_file(path, schema)
+        dataframe = self.process_file(files, schema)
+
+        self.write(dataframe)
 
         # 처리 완료 로그
         logging.info(f"모든 파일 처리가 완료되었습니다. 결과가 {self.output_path}에 저장되었습니다.")
@@ -142,7 +172,6 @@ def parse_arguments():
 
 # 실행 예제
 if __name__ == "__main__":
-
     # 명령줄 인자 처리
     args = parse_arguments()
 
