@@ -27,8 +27,8 @@ class LogsCleansing:
         self.execute_date = execute_date
         self.output_path = f"s3a://{self.bucket_name}/dm/cleansing_data/"
 
-        # Partition
-        self.partition_cols = ["cre_dtm", "url_method"]
+        # Partition Cols
+        self.partition_cols = ["cre_dtm", "url", "method"]
 
         jar_files = glob.glob("/Users/jeong/Desktop/spark_aws/*.jar")
         # Spark 세션 생성
@@ -108,8 +108,7 @@ class LogsCleansing:
             .withColumn("pathParam", self.classify_url_by_last_token_udf(col("url")).getItem("last_token"))
 
         # URL과 method를 결합하여 새로운 컬럼 'url_method' 생성 (사이에 '/' 추가), etl 시간 기록
-        df = df.withColumn("url_method", concat(col("url_part"), lit("/"), col("method"))) \
-            .withColumn("cre_dtm", to_date(col("requestTime"))) \
+        df = df.withColumn("cre_dtm", to_date(col("requestTime"))) \
             .withColumn("etl_dtm", current_timestamp())
 
         return df
