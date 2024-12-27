@@ -130,7 +130,7 @@ class LogsCleansing:
         # 모든 배치를 병합
         pr_df = batch_dfs[0]
         for df in batch_dfs[1:]:
-            pr_df = pr_df.union(df)
+            pr_df = pr_df.unionAll(df)
 
         # URL에서 'http://' 제거
         pr_df = pr_df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
