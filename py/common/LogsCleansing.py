@@ -129,8 +129,8 @@ class LogsCleansing:
 
         # 모든 배치를 병합
         pr_df = batch_dfs[0]
-        for df in batch_dfs[1:]:
-            pr_df = pr_df.unionAll(df)
+        # for df in batch_dfs[1:]:
+        #     pr_df = pr_df.unionAll(df)
 
         # URL에서 'http://' 제거
         pr_df = pr_df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
@@ -185,7 +185,7 @@ class LogsCleansing:
         # 각 파일 처리
         dataframe = self.process_file(files)
 
-        self.write(dataframe)
+        # self.write(dataframe)
 
         # 처리 완료 로그
         logging.info(f"모든 파일 처리가 완료되었습니다. 결과가 {self.output_path}에 저장되었습니다.")
