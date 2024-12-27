@@ -127,11 +127,13 @@ class LogsCleansing:
             batch_df = self.spark.read.json(batch_paths, schema=schemas)
             batch_dfs.append(batch_df)
 
-            # 모든 배치를 병합 (reduce 사용)
-        if batch_dfs:  # batch_dfs가 비어있지 않을 경우만 병합
-            pr_df = reduce(lambda df1, df2: df1.union(df2), batch_dfs)
-        else:
-            pr_df = self.spark.createDataFrame([], schemas)
+        pr_df = None
+        for batch_df in batch_dfs:
+            if pr_df is None:
+                pr_df = batch_df
+            else:
+                pr_df = pr_df.union(batch_df).persist()
+                pr_df.unpersist()
 
         # URL에서 'http://' 제거
         pr_df = pr_df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
