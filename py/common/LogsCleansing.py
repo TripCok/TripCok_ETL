@@ -32,8 +32,8 @@ class LogsCleansing:
         # Partition Cols
         self.partition_cols = ["cre_dtm", "url_part", "method"]
 
-        # jar_files = glob.glob("/home/ubuntu/spark/jars/*.jar")
-        jar_files = glob.glob("/Users/jeong/Desktop/spark_aws/*.jar")
+        jar_files = glob.glob("/home/ubuntu/spark/jars/*.jar")
+        # jar_files = glob.glob("/Users/jeong/Desktop/spark_aws/*.jar")
 
         # Spark 세션 생성
         self.spark = SparkSession.builder \
