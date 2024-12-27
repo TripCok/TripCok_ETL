@@ -56,7 +56,14 @@ class LogsCleansing:
             StructField("time", LongType(), True),
         ])
         return schema
-
+        
+    # URL을 디코딩하는 UDF(사용자 정의 함수)
+    def decode_url(self,url):
+        return unquote(url)
+    
+    # UDF 등록
+    decode_url_udf = F.udf(decode_url,StringType())
+    
     # UDF 함수 정의
     @staticmethod
     @udf(StructType([
@@ -102,7 +109,8 @@ class LogsCleansing:
 
         # URL에서 'http://' 제거
         df = df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
-
+        df = df.withColumn("url", self.decode_url_udf(F.col("url")))
+        
         # URL을 처리하여 새로운 컬럼을 생성
         df = df.withColumn("url_part", self.classify_url_by_last_token_udf(col("url")).getItem("url_part")) \
             .withColumn("pathParam", self.classify_url_by_last_token_udf(col("url")).getItem("last_token"))
