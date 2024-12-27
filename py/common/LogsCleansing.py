@@ -33,12 +33,15 @@ class LogsCleansing:
         self.partition_cols = ["cre_dtm", "url_part", "method"]
 
         jar_files = glob.glob("/home/ubuntu/spark/jars/*.jar")
+        # jar_files = glob.glob("/Users/jeong/Desktop/spark_aws/*.jar")
 
         # Spark 세션 생성
         self.spark = SparkSession.builder \
             .appName("Logs Cleansing") \
             .config("spark.jars", ",".join(jar_files)) \
             .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
+            .config("spark.executor.memory", "4g") \
+            .config("spark.executor.cores", "2") \
             .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
             .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
             .getOrCreate()
