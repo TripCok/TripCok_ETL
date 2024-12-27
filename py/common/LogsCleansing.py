@@ -1,16 +1,16 @@
 import argparse
+import glob
 import logging
 import os
 import re
 from datetime import datetime
-
+from urllib.parse import unquote
+from functools import reduce
 import boto3
 from pyspark.sql import SparkSession, Window
-from pyspark.sql.functions import udf, col, lit, concat, regexp_replace, current_timestamp, to_date, row_number
-from pyspark.sql.types import StructType, StructField, StringType, LongType
-import glob
 from pyspark.sql import functions as F
-from urllib.parse import unquote
+from pyspark.sql.functions import udf, col, regexp_replace, current_timestamp, to_date, row_number
+from pyspark.sql.types import StructType, StructField, StringType, LongType
 
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
@@ -40,8 +40,8 @@ class LogsCleansing:
             .appName("Logs Cleansing") \
             .config("spark.jars", ",".join(jar_files)) \
             .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
-            .config("spark.executor.memory", "2g") \
-            .config("spark.executor.cores", "1") \
+            .config("spark.executor.memory", "4g") \
+            .config("spark.executor.cores", "2") \
             .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
             .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
             .getOrCreate()
@@ -127,10 +127,11 @@ class LogsCleansing:
             batch_df = self.spark.read.json(batch_paths, schema=schemas)
             batch_dfs.append(batch_df)
 
-        # 모든 배치를 병합
-        pr_df = batch_dfs[0]
-        # for df in batch_dfs[1:]:
-        #     pr_df = pr_df.unionAll(df)
+            # 모든 배치를 병합 (reduce 사용)
+        if batch_dfs:  # batch_dfs가 비어있지 않을 경우만 병합
+            pr_df = reduce(lambda df1, df2: df1.union(df2), batch_dfs)
+        else:
+            pr_df = self.spark.createDataFrame([], schemas)
 
         # URL에서 'http://' 제거
         pr_df = pr_df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
