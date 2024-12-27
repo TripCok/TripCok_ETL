@@ -9,6 +9,8 @@ from pyspark.sql import SparkSession, Window
 from pyspark.sql.functions import udf, col, lit, concat, regexp_replace, current_timestamp, to_date, row_number
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 import glob
+from pyspark.sql import functions as F
+from urllib.parse import unquote
 
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
@@ -28,9 +30,9 @@ class LogsCleansing:
         self.output_path = f"s3a://{self.bucket_name}/dm/cleansing_data/"
 
         # Partition Cols
-        self.partition_cols = ["cre_dtm", "url", "method"]
+        self.partition_cols = ["cre_dtm", "url_part", "method"]
 
-        jar_files = glob.glob("/Users/jeong/Desktop/spark_aws/*.jar")
+        jar_files = glob.glob("/home/ubuntu/spark/jars/*.jar")
         # Spark 세션 생성
         self.spark = SparkSession.builder \
             .appName("Logs Cleansing") \
@@ -39,7 +41,10 @@ class LogsCleansing:
             .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
             .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
             .getOrCreate()
-
+            # decode_url_udf는 클래스 내에서 정의
+        
+        self.decode_url_udf = F.udf(self.decode_url, StringType())
+    
     def get_schema(self):
         # JSON 데이터의 스키마 정의
         schema = StructType([
@@ -58,13 +63,10 @@ class LogsCleansing:
         return schema
         
     # URL을 디코딩하는 UDF(사용자 정의 함수)
-    def decode_url(self,url):
+    @staticmethod
+    def decode_url(url):
         return unquote(url)
     
-    # UDF 등록
-    decode_url_udf = F.udf(decode_url,StringType())
-    
-    # UDF 함수 정의
     @staticmethod
     @udf(StructType([
         StructField("url_part", StringType(), True),
