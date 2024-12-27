@@ -40,8 +40,8 @@ class LogsCleansing:
             .appName("Logs Cleansing") \
             .config("spark.jars", ",".join(jar_files)) \
             .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
-            .config("spark.executor.memory", "4g") \
-            .config("spark.executor.cores", "2") \
+            .config("spark.executor.memory", "2g") \
+            .config("spark.executor.cores", "1") \
             .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
             .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
             .getOrCreate()
