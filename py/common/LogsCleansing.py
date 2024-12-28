@@ -1,17 +1,12 @@
 import argparse
-import glob
 import logging
-import os
 import re
 from datetime import datetime
-from urllib.parse import unquote
-from functools import reduce
 import boto3
-from pyspark.sql import SparkSession, Window
-from pyspark.sql import functions as F
+from pyspark.sql import Window
 from pyspark.sql.functions import udf, col, regexp_replace, current_timestamp, to_date, row_number
 from pyspark.sql.types import StructType, StructField, StringType, LongType
-
+from spark import SessionGen
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
 
@@ -32,22 +27,11 @@ class LogsCleansing:
         # Partition Cols
         self.partition_cols = ["cre_dtm", "url_part", "method"]
 
-        jar_files = glob.glob("/home/ubuntu/spark/jars/*.jar")
+        #jar_files = glob.glob("/home/ubuntu/spark/jars/*.jar")
         # jar_files = glob.glob("/Users/jeong/Desktop/spark_aws/*.jar")
 
         # Spark 세션 생성
-        self.spark = SparkSession.builder \
-            .appName("Logs Cleansing") \
-            .config("spark.jars", ",".join(jar_files)) \
-            .config("spark.hadoop.fs.s3a.access.key", os.getenv("AWS_ACCESS_KEY_ID")) \
-            .config("spark.executor.memory", "2g") \
-            .config("spark.executor.cores", "2") \
-            .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
-            .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
-            .getOrCreate()
-        # decode_url_udf는 클래스 내에서 정의
-
-        self.decode_url_udf = F.udf(self.decode_url, StringType())
+        self.spark = SessionGen().create_session(app_name="LogsCleansing", local=True)
 
     def get_schema(self):
         # JSON 데이터의 스키마 정의
@@ -66,18 +50,12 @@ class LogsCleansing:
         ])
         return schema
 
-    # URL을 디코딩하는 UDF(사용자 정의 함수)
-    @staticmethod
-    def decode_url(url):
-        return unquote(url)
-
     @staticmethod
     @udf(StructType([
         StructField("url_part", StringType(), True),
         StructField("last_token", StringType(), True)
     ]))
     def classify_url_by_last_token_udf(url):
-
         # URL에서 마지막 토큰을 추출
         last_token: str = url.rstrip("/").split("/")[-1]
 
@@ -110,34 +88,34 @@ class LogsCleansing:
     def process_file(self, paths):
         schemas = self.get_schema()
         logging.info(f"Processing files: {paths}")
+        #
+        # # 초기 빈 리스트 생성
+        # batch_dfs = []
+        #
+        # # 배치 크기 설정
+        # batch_size = 10
+        #
+        # # 배치 처리로 데이터 읽기
+        # for batch_start in range(0, len(paths), batch_size):
+        #     batch_paths = paths[batch_start: batch_start + batch_size]
+        #
+        #     logging.info(f"Reading batch: {batch_start // batch_size + 1}, Files: {batch_paths}")
+        #
+        #     # 현재 배치의 데이터를 읽어들임
+        #     batch_df = self.spark.read.json(batch_paths, schema=schemas)
+        #     batch_dfs.append(batch_df)
+        #
+        # pr_df = None
+        # for batch_df in batch_dfs:
+        #     if pr_df is None:
+        #         pr_df = batch_df
+        #     else:
+        #         pr_df = pr_df.union(batch_df).persist()
+        #         pr_df.unpersist()
 
-        # 초기 빈 리스트 생성
-        batch_dfs = []
-
-        # 배치 크기 설정
-        batch_size = 10
-
-        # 배치 처리로 데이터 읽기
-        for batch_start in range(0, len(paths), batch_size):
-            batch_paths = paths[batch_start: batch_start + batch_size]
-
-            logging.info(f"Reading batch: {batch_start // batch_size + 1}, Files: {batch_paths}")
-
-            # 현재 배치의 데이터를 읽어들임
-            batch_df = self.spark.read.json(batch_paths, schema=schemas)
-            batch_dfs.append(batch_df)
-
-        pr_df = None
-        for batch_df in batch_dfs:
-            if pr_df is None:
-                pr_df = batch_df
-            else:
-                pr_df = pr_df.union(batch_df).persist()
-                pr_df.unpersist()
-
+        pr_df = self.spark.read.json(paths, schema=schemas)
         # URL에서 'http://' 제거
         pr_df = pr_df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
-        pr_df = pr_df.withColumn("url", self.decode_url_udf(F.col("url")))
 
         # URL을 처리하여 새로운 컬럼을 생성
         pr_df = pr_df.withColumn("url_part", self.classify_url_by_last_token_udf(col("url")).getItem("url_part")) \
@@ -159,7 +137,7 @@ class LogsCleansing:
             self.deduplicate(df)
 
         # Parquet 형식으로 저장 (url_method로 파티셔닝, 5개의 파티션)
-        df.coalesce(5).write.mode("overwrite").partitionBy(self.partition_cols).parquet(self.output_path)
+        df.coalesce(5).write.mode("append").partitionBy(self.partition_cols).parquet(self.output_path)
 
     def deduplicate(self, new_df):
         origin_df = self.spark.read.parquet(self.output_path)
@@ -179,16 +157,13 @@ class LogsCleansing:
         # 로그에 처리 시작 시간 기록
         logging.info(f"[ {datetime.now()} ] AWS S3 {self.execute_date}일자 클렌징 시작")
 
-        # 스키마 가져오기
-        schema = self.get_schema()
-
         # 파일 로드
         files = self.load_files()
 
         # 각 파일 처리
         dataframe = self.process_file(files)
 
-        # self.write(dataframe)
+        self.write(dataframe)
 
         # 처리 완료 로그
         logging.info(f"모든 파일 처리가 완료되었습니다. 결과가 {self.output_path}에 저장되었습니다.")
