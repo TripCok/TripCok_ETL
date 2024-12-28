@@ -11,6 +11,8 @@ import pymysql
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
 
+
+
 class InsertDb:
     def __init__(self, bucket_name, folder_path, execute_date):
         self.s3 = boto3.client('s3')
