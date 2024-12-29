@@ -8,7 +8,7 @@ from pyspark.sql.functions import col, row_number
 from botocore.response import get_response
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType, StructField, FloatType, IntegerType, StringType, DoubleType, LongType, ArrayType, MapType
-from pyspark.sql.functions import from_json, col, udf, count, explode
+from pyspark.sql.functions import from_json, col, udf, count, explode, expr
 from common_use.SparkSess import SessionGen
 from common_use.ModelServer import ModelServer
 
@@ -28,10 +28,9 @@ class MemberPlaceRecommend():
         # UDF 등록
         self.recommendations_udf = udf(
             MemberPlaceRecommend.get_recommendations,
-            StructType([
-                StructField("cids", ArrayType(StringType()), True),
-                StructField("scores", ArrayType(FloatType()), True)
-            ])
+            ArrayType(
+                MapType(StringType(), FloatType())
+            )
         )
 
     def get_schema(self):
@@ -70,7 +69,6 @@ class MemberPlaceRecommend():
         .drop("requestParam").drop("request").drop("statusCode").drop("time"))
 
         #df.show(n=10, truncate=False)
-
         ml_map_df = ml_map_df.filter(col("id").cast("int").isNotNull())
         ml_map_df = (ml_map_df.select(
             col("id").alias("id"),
@@ -83,9 +81,7 @@ class MemberPlaceRecommend():
 
         joined_df = df.join(ml_map_df, on="id", how="inner")
 
-        #joined_df.show(n=10, truncate=False)
-        joined_df.createOrReplaceTempView("joined_df")
-
+        joined_df.printSchema()
         # 윈도우 정의
         window_spec = Window.partitionBy("memberId").orderBy(col("counts").desc())
 
@@ -94,13 +90,18 @@ class MemberPlaceRecommend():
 
         # 순위 계산
         ranked_df = grouped_df.withColumn("rank", row_number().over(window_spec))
-
+        ranked_df.printSchema()
         # rank가 1인 행만 필터링
         top_counts_df = ranked_df.filter(col("rank") == 1).select("memberId", "ml_mapping_id", "counts")
 
         top_counts_df.show()
 
-        return top_counts_df
+        result_df = top_counts_df.join(joined_df.select("memberId", "ml_mapping_id", "etl_dtm"),
+                                       on=["memberId", "ml_mapping_id"], how="left")
+
+        result_df.show(truncate=False)
+
+        return result_df
 
     @staticmethod
     def get_recommendations(ml_mapping):
@@ -109,30 +110,25 @@ class MemberPlaceRecommend():
 
         # FastAPI 요청
         body = {"contentids": [ml_mapping], "top_k": 5}
-        cids, scores = model_server.request2server(api="/recommend/", param=2750144, body=body, test=True)
-        if cids and scores:
-            return {"cids": cids, "scores": scores}
-        return {"cids": [], "scores": []}
+        response = model_server.request2server(api="/recommend/", param=2750144, body=body, test=True)
+        if response:
+            return response
+        else:
+            return []
 
     def process(self, df) -> DataFrame:
         df = df.withColumn(
             "recommends",
             self.recommendations_udf(col("ml_mapping_id"))
         )
+        # recommends 배열을 개별 Map으로 분리
+        exploded_df = df.withColumn("recommendation", explode(col("recommends")))
 
-        df = df.select(
-            col("*"),
-            col("recommends.cids").alias("cids"),
-            col("recommends.scores").alias("scores")
-        ).drop("recommends")
+        exploded_df.printSchema()
 
-        df.show(n=10, truncate=False)
-
-        # 배열 컬럼(cids, scores)을 개별 행으로 분리
-        normalized_df = df.withColumn("cid", explode(col("cids"))) \
-            .withColumn("score", explode(col("scores"))) \
-            .drop("cids", "scores")
-
+        # Extract key and value using keys and values functions
+        normalized_df = exploded_df.withColumn("cid", expr("map_keys(recommendation)[0]")) \
+            .withColumn("score", expr("map_values(recommendation)[0]")).drop("recommends").drop("recommendation")
         # 결과 확인
         normalized_df.show(truncate=False)
         return normalized_df
