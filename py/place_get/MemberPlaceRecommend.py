@@ -2,6 +2,7 @@ import glob
 import logging
 import os
 import sys
+import boto3
 
 from pyspark.sql.window import Window
 from pyspark.sql.functions import col, row_number
@@ -24,6 +25,10 @@ class MemberPlaceRecommend():
         self.execute_date = execute_date
         self.s3_path = f"s3a://tripcok/dm/cleansing_data/cre_dtm={execute_date}/url_part=_api_v1_place_/method=GET/"
         self.spark = SessionGen().create_session(app_name="member_place_recommend", local=False)
+        self.output_path = f"s3a://tripcok/processed_data/"
+        self.partition_cols = ["etl_dtm"]
+        self.bucket_name = "tripcok"
+
 
         # UDF 등록
         self.recommendations_udf = udf(
@@ -134,6 +139,11 @@ class MemberPlaceRecommend():
         normalized_df.show(truncate=False)
         return normalized_df
 
+    def check_s3_folder_exists(self):
+        s3 = boto3.client('s3')
+        response = s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.output_path, Delimiter='/')
+        return 'Contents' in response or 'CommonPrefixes' in response
+
     def write(self, df):
 
         # 데이터 확인 (옵션) - DataFrame의 일부 출력
@@ -160,6 +170,7 @@ class MemberPlaceRecommend():
         df = self.load()
         df.show(n =10,truncate=False)
         processed_df = self.process(df)
+        self.write(processed_df)
 
 
 if __name__ == "__main__":
