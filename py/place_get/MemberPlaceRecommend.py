@@ -91,12 +91,13 @@ class MemberPlaceRecommend():
         # 순위 계산
         ranked_df = grouped_df.withColumn("rank", row_number().over(window_spec))
         ranked_df.printSchema()
+
         # rank가 1인 행만 필터링
         top_counts_df = ranked_df.filter(col("rank") == 1).select("memberId", "ml_mapping_id", "counts")
 
         top_counts_df.show()
 
-        result_df = top_counts_df.join(joined_df.select("memberId", "ml_mapping_id", "etl_dtm"),
+        result_df = top_counts_df.join(joined_df.select("traceId", "memberId", "ml_mapping_id", "etl_dtm"),
                                        on=["memberId", "ml_mapping_id"], how="left")
 
         result_df.show(truncate=False)
@@ -133,10 +134,28 @@ class MemberPlaceRecommend():
         normalized_df.show(truncate=False)
         return normalized_df
 
-    def write(self) -> None:
-        return None
-    def _deduplicate(self) -> None:
-        return None
+    def write(self, df):
+
+        # 데이터 확인 (옵션) - DataFrame의 일부 출력
+        df.show(truncate=False)
+
+        # AWS 데이터가 있는지 없는지 검증
+        if self.check_s3_folder_exists():
+            self.deduplicate(df)
+
+        # Parquet 형식으로 저장 (url_method로 파티셔닝, 5개의 파티션)
+        df.coalesce(5).write.mode("append").partitionBy(self.partition_cols).parquet(self.output_path)
+
+    def deduplicate(self, new_df):
+        origin_df = self.spark.read.parquet(self.output_path)
+
+        union_df = origin_df.union(new_df)
+        grouping_df = Window.partitionBy("traceId").orderBy(col("etl_dtm").desc)
+        deduplicate_df = union_df.withColumn('row_no', row_number().over(grouping_df)) \
+            .filter(col("row_no") == 1).drop('row_no')
+        return deduplicate_df
+
+
     def run(self):
         df = self.load()
         df.show(n =10,truncate=False)
