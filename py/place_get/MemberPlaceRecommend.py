@@ -103,7 +103,9 @@ class MemberPlaceRecommend():
         top_counts_df.show()
 
         result_df = top_counts_df.join(joined_df.select("traceId", "memberId", "ml_mapping_id", "etl_dtm"),
-                                       on=["memberId", "ml_mapping_id"], how="left")
+                                       on=["memberId", "ml_mapping_id"], how="left").orderBy("traceId")
+
+        result_df = result_df.dropDuplicates(["memberId", "ml_mapping_id"])
 
         result_df.show(truncate=False)
 
