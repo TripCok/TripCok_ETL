@@ -3,6 +3,7 @@ import uuid
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType
 from datetime import datetime, timedelta, timezone
+from pyspark.sql.functions import col, regexp_replace
 
 def getSchema():
     # JSON 데이터의 외부 스키마 정의
@@ -65,8 +66,9 @@ if 'Contents' in response:
         # 데이터 확인 (옵션)
         df.show(truncate=False)
 
+        df = df.withColumn("url", regexp_replace(col("url"), r"^http://[^/]+", ""))
         # Parquet 형식으로 append 저장
-        df.coalesce(5).write.mode("append").partitionBy("url", "memberId").parquet(output_path)
+        df.coalesce(5).write.mode("append").partitionBy("url","method").parquet(output_path)
 
     print(f"Batch processing completed. Parquet saved to: {output_path}")
 else:
