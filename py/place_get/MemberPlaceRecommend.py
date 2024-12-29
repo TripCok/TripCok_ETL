@@ -10,8 +10,8 @@ from botocore.response import get_response
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType, StructField, FloatType, IntegerType, StringType, DoubleType, LongType, ArrayType, MapType
 from pyspark.sql.functions import from_json, col, udf, count, explode, expr
-from common_use.SparkSess import SessionGen
-from common_use.ModelServer import ModelServer
+from common.SparkSess import SessionGen
+from common.ModelServer import ModelServer
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s - %(message)s')
