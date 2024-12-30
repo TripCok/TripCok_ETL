@@ -118,7 +118,7 @@ class MemberPlaceRecommend():
 
         # FastAPI 요청
         body = {"contentids": [ml_mapping], "top_k": 5}
-        response = model_server.request2server(api="/recommend/", param=2750144, body=body, test=True)
+        response = model_server.request2server(api="/recommend/", param=ml_mapping, body=body, test=False)
         if response:
             return response
         else:
@@ -172,6 +172,7 @@ class MemberPlaceRecommend():
         df = self.load()
         df.show(n =10,truncate=False)
         processed_df = self.process(df)
+        processed_df.show(truncate=False)
         self.write(processed_df)
 
 
