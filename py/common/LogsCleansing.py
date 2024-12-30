@@ -88,30 +88,6 @@ class LogsCleansing:
     def process_file(self, paths):
         schemas = self.get_schema()
         logging.info(f"Processing files: {paths}")
-        #
-        # # 초기 빈 리스트 생성
-        # batch_dfs = []
-        #
-        # # 배치 크기 설정
-        # batch_size = 10
-        #
-        # # 배치 처리로 데이터 읽기
-        # for batch_start in range(0, len(paths), batch_size):
-        #     batch_paths = paths[batch_start: batch_start + batch_size]
-        #
-        #     logging.info(f"Reading batch: {batch_start // batch_size + 1}, Files: {batch_paths}")
-        #
-        #     # 현재 배치의 데이터를 읽어들임
-        #     batch_df = self.spark.read.json(batch_paths, schema=schemas)
-        #     batch_dfs.append(batch_df)
-        #
-        # pr_df = None
-        # for batch_df in batch_dfs:
-        #     if pr_df is None:
-        #         pr_df = batch_df
-        #     else:
-        #         pr_df = pr_df.union(batch_df).persist()
-        #         pr_df.unpersist()
 
         pr_df = self.spark.read.json(paths, schema=schemas)
         # URL에서 'http://' 제거
