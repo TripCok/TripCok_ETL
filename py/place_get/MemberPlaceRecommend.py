@@ -86,7 +86,7 @@ class MemberPlaceRecommend():
 
         joined_df = df.join(ml_map_df, on="id", how="inner")
 
-        joined_df.printSchema()
+        #joined_df.printSchema()
         # 윈도우 정의
         window_spec = Window.partitionBy("memberId").orderBy(col("counts").desc())
 
@@ -95,19 +95,19 @@ class MemberPlaceRecommend():
 
         # 순위 계산
         ranked_df = grouped_df.withColumn("rank", row_number().over(window_spec))
-        ranked_df.printSchema()
+        #ranked_df.printSchema()
 
         # rank가 1인 행만 필터링
         top_counts_df = ranked_df.filter(col("rank") == 1).select("memberId", "ml_mapping_id", "counts")
 
-        top_counts_df.show()
+        #top_counts_df.show()
 
         result_df = top_counts_df.join(joined_df.select("traceId", "memberId", "ml_mapping_id", "etl_dtm"),
                                        on=["memberId", "ml_mapping_id"], how="left").orderBy("traceId")
 
         result_df = result_df.dropDuplicates(["memberId", "ml_mapping_id"])
 
-        result_df.show(truncate=False)
+        #result_df.show(truncate=False)
 
         return result_df
 
@@ -132,13 +132,13 @@ class MemberPlaceRecommend():
         # recommends 배열을 개별 Map으로 분리
         exploded_df = df.withColumn("recommendation", explode(col("recommends")))
 
-        exploded_df.printSchema()
+        #exploded_df.printSchema()
 
         # Extract key and value using keys and values functions
         normalized_df = exploded_df.withColumn("cid", expr("map_keys(recommendation)[0]")) \
             .withColumn("score", expr("map_values(recommendation)[0]")).drop("recommends").drop("recommendation")
         # 결과 확인
-        normalized_df.show(truncate=False)
+        #normalized_df.show(truncate=False)
         return normalized_df
 
     def check_s3_folder_exists(self):
@@ -149,7 +149,7 @@ class MemberPlaceRecommend():
     def write(self, df):
 
         # 데이터 확인 (옵션) - DataFrame의 일부 출력
-        df.show(truncate=False)
+        #df.show(truncate=False)
 
         # AWS 데이터가 있는지 없는지 검증
         if self.check_s3_folder_exists():
