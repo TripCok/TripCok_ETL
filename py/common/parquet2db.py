@@ -1,6 +1,7 @@
+import os
 import logging
 from pyspark.sql import SparkSession
-from SparkSess import SessionGen
+from common.SparkSess import SessionGen
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
 
@@ -21,33 +22,33 @@ class SparkSessionManager:
             .getOrCreate()
 
 
-class PDBC:
+class JDBC:
     """데이터베이스와 상호작용을 관리하는 클래스."""
-    def __init__(self, spark_session: SparkSession, db_config: dict):
+    def __init__(self, spark_session: SparkSession):
         self.spark = spark_session
-        self.db_url = db_config["url"]
-        self.db_user = db_config["user"]
-        self.db_password = db_config["password"]
-        self.db_table = db_config.get("table", "")
+        self.db_url = os.getenv("AGG_DB_URL")  # 기본값 설정 가능
+        self.db_user = os.getenv("AGG_DB_USER")
+        self.db_password = os.getenv("AGG_DB_PASSWORD")
+        self.db_schema = os.getenv("AGG_DB_SCHEMA")
 
-    def read(self, table_name: str):
+    def read(self, db_schema : str, table_name: str):
         """데이터베이스에서 데이터를 읽어오는 메서드."""
         logging.info(f"Reading data from table: {table_name}")
         return self.spark.read \
             .format("jdbc") \
             .option("url", self.db_url) \
-            .option("dbtable", table_name) \
+            .option("dbtable", f"{db_schema}.{table_name}") \
             .option("user", self.db_user) \
             .option("password", self.db_password) \
             .load()
 
-    def write(self, df, table_name: str, column_types: str = None, mode: str = "append"):
+    def write(self, df, table_name: str, column_types: str = None, mode: str = "overwrite"):
         """데이터를 데이터베이스에 저장하는 메서드."""
         logging.info(f"Writing data to table: {table_name}")
         writer = df.write \
             .format("jdbc") \
             .option("url", self.db_url) \
-            .option("dbtable", table_name) \
+            .option("dbtable", f"{self.db_schema}.{table_name}") \
             .option("user", self.db_user) \
             .option("password", self.db_password) \
             .mode(mode)
@@ -57,25 +58,25 @@ class PDBC:
 
         writer.save()
 
+    def create(self, df, db_schema, table_name: str, mode: str = "overwrite"):
+        """데이터를 데이터베이스에 저장하는 메서드."""
+        logging.info(f"Writing data to table: {table_name}")
+
+        # DataFrame을 지정한 PostgreSQL 테이블에 쓰기
+        df.write \
+            .format("jdbc") \
+            .option("url", self.db_url) \
+            .option("dbtable", f"{db_schema}.{table_name}") \
+            .option("user", self.db_user) \
+            .option("password", self.db_password) \
+            .mode(mode) \
+            .save()
+
 
 
 
 # 실행 예제
 if __name__ == "__main__":
-    # KST 시간대 정의
-    KST = timezone(timedelta(hours=9))
 
-    # 현재 KST 날짜 가져오기
-    current_date = datetime.now(KST).strftime('%Y%m%d')
-    
-    # 명령줄 인자 처리 
-    parser = argparse.ArgumentParser(description="Logs Cleansing Pipeline")
-    parser.add_argument("--bucket", required=False, default="tripcok", help="S3 bucket name")
-    parser.add_argument("--folder", required=False, default=f"processed_data/", help="S3 folder path (prefix)")
-    parser.add_argument("--date", required=True, help="Execution date (YYYYMMDD)")
-    
-    # parser 저장
-    args = parser.parse_args()
-
-    app = InsertDb(bucket_name=args.bucket, folder_path=args.folder, execute_date=args.date)
+    app = JDBC()
     app.run()
