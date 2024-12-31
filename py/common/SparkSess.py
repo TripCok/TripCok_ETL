@@ -13,6 +13,8 @@ class SessionGen():
 
         self.LOCAL_JAR_PATH = f"{spark_home}/jars/*.jar"  # SPARK_HOME 경로에서 JAR 파일
         self.PROD_JAR_PATH = "/home/ubuntu/spark/jars/*.jar"  # 프로덕션 JAR 파일 경로
+        self.DRIVER_CLASSPATH = os.getenv("DRIVER_CLASSPATH")
+        self.EXECUTOR_CLASSPATH = os.getenv("EXECUTOR_CLASSPATH")
 
     def create_session(self, app_name=None, local: bool = False):
         os.environ["SPARK_LOCAL_IP"] = "127.0.0.1"
@@ -23,7 +25,9 @@ class SessionGen():
                         .config("spark.executor.memory", "2g") \
                         .config("spark.executor.cores", "2") \
                         .config("spark.hadoop.fs.s3a.secret.key", os.getenv("AWS_SECRET_ACCESS_KEY")) \
-                        .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
+                        .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
+                        .config("spark.driver.extraClassPath", self.DRIVER_CLASSPATH) \
+                        .config("spark.executor.extraClassPath", self.EXECUTOR_CLASSPATH)
 
         if local:
             jar_files = glob.glob(self.LOCAL_JAR_PATH)
