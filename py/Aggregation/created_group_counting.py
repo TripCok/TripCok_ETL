@@ -13,13 +13,11 @@ logging.basicConfig(level=logging.INFO)
 """
 해당 일자에 생성된 모임 수 구하기
 """
-
-
 class CreatedGroupCounting:
 
     def __init__(self, process_date):
         # 스파크 세션 생성
-        self.spark = SessionGen().create_session(app_name="AggCreateGroup", local=True)
+        self.spark = SessionGen().create_session(app_name="CreatedGroupCounting", local=True)
 
         # S3 클라이언트 초기화
         self.s3 = boto3.client('s3')
