@@ -13,6 +13,8 @@ logging.basicConfig(level=logging.INFO)
 """
 해당 일자에 생성된 모임 수 구하기
 """
+
+
 class CreatedGroupCounting:
 
     def __init__(self, process_date):
@@ -90,7 +92,7 @@ class CreatedGroupCounting:
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Top Application Groups Pipeline")
+    parser = argparse.ArgumentParser(description="Created Group Counting Pipeline")
     parser.add_argument("--date", required=True, help="Execution date (YYYY-MM-DD)")
     return parser.parse_args()
 
