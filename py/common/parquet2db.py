@@ -74,7 +74,6 @@ class JDBC:
 
 
 
-
 # 실행 예제
 if __name__ == "__main__":
 
