@@ -7,6 +7,7 @@ import time
 import asyncio
 import argparse
 from datetime import datetime
+from common.parquet2db import JDBC
 
 
 from pyspark.sql.window import Window
@@ -19,6 +20,7 @@ from common.SparkSess import SessionGen
 from common.ModelServer import ModelServer
 from place_get.AsyncAPIClient import AsyncAPIClient
 from requests.utils import extract_zipped_paths
+from common.parquet2db import JDBC
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s - %(message)s')
@@ -27,7 +29,6 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 
 class MemberPlaceRecommend():
 
-
     def __init__(self, execute_date):
         self.execute_date = execute_date
         self.s3_path = f"s3a://tripcok/dm/cleansing_data/cre_dtm={execute_date}/url_part=_api_v1_place_/method=GET/"
@@ -35,15 +36,6 @@ class MemberPlaceRecommend():
         self.output_path = f"s3a://tripcok/processed_data/"
         self.partition_cols = ["cre_dtm"]
         self.bucket_name = "tripcok"
-
-
-        # UDF 등록
-        #self.recommendations_udf = udf(
-        #    MemberPlaceRecommend.get_recommendations,
-        #    ArrayType(
-        #       MapType(StringType(), FloatType())
-        #    )
-        #)
 
     def get_schema(self):
         # JSON 스키마 정의
@@ -170,7 +162,6 @@ class MemberPlaceRecommend():
         # 원본 데이터와 병합
         joined_df = df.join(normalized_df, on="ml_mapping_id", how="outer")
         joined_df.show(truncate=False)
-        #joined_df = joined_df.groupBy("memberId").agg(count("*").alias("count"))
 
         return joined_df
 
@@ -180,7 +171,7 @@ class MemberPlaceRecommend():
         response = s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.output_path, Delimiter='/')
         return 'Contents' in response or 'CommonPrefixes' in response
 
-    def write(self, df):
+    def write(self, df, date):
 
         # AWS 데이터가 있는지 없는지 검증
         if self.check_s3_folder_exists():
@@ -203,7 +194,6 @@ class MemberPlaceRecommend():
         df = self.load()
         df.show(n =10,truncate=False)
         processed_df = self.process(asynchronicity,df)
-        #processed_df.show(truncate=False)
         self.write(processed_df)
 
 def parse_arguments():
@@ -223,6 +213,7 @@ if __name__ == "__main__":
         etl_job.run(ass)
         logger.info('ETL Job Completed Successfully')
         sys.exit(0)
+
     except Exception as e:
         logger.error(f"ETL Job Failed: {e}")
         sys.exit(1)

@@ -2,6 +2,8 @@ import os
 import logging
 from pyspark.sql import SparkSession
 from common.SparkSess import SessionGen
+from datetime import datetime, timedelta
+from pyspark.sql.functions import col, lit, date_sub,current_date,count
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
 
@@ -72,6 +74,38 @@ class JDBC:
             .mode(mode) \
             .save()
 
+    def storeDataForPeriod(self, s3_base_path : str, partitioned_column : str, start_date : str, period : int, table_name: str ):
+        """
+        주어진 기간 동안 S3 경로에서 데이터를 읽어와 병합한 후 데이터베이스에 저장합니다.
+
+        Args:
+            s3_base_path (str): S3 데이터가 저장된 기본 경로.
+            paritioned_column (str): 파티션을 나타내는 컬럼명 (예: 날짜 컬럼).
+            start_date (str): 시작 날짜 (YYYY-MM-DD 형식).
+            period (int): 처리할 기간 (일 단위).
+            table_name (str): 저장할 데이터베이스 테이블 이름.
+        """
+
+        execute_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+
+        date_range = [(execute_date_obj - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(period)]
+
+        s3_paths = [f"{s3_base_path}/{partitioned_column}={date}/" for date in date_range]
+
+        dataframes = [self.spark.read.parquet(path) for path in s3_paths]
+
+        # 만약 cre_dtm이 누락되었다면 추가
+        for i, date in enumerate(date_range):
+            dataframes[i] = dataframes[i].withColumn("cre_dtm", lit(date))
+
+        combined_data = dataframes[0]
+
+        # 데이터프레임 결합
+        for df in dataframes[1:]:
+            combined_data = combined_data.union(df)
+
+        self.create(combined_data, "tripcok_db", f"{table_name}")
+        return combined_dataw
 
 
 # 실행 예제
