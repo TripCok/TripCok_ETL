@@ -137,6 +137,7 @@ class MemberPlaceRecommend():
         return api_results
 
     def process(self,asynchronicity, df) -> DataFrame:
+        print("process 진입")
         api_results = self.fetch_and_save_results(asynchronicity, df)
         results_df = self.spark.createDataFrame(api_results)  # Spark로 변환
 
@@ -188,7 +189,6 @@ class MemberPlaceRecommend():
         deduplicate_df = union_df.withColumn('row_no', row_number().over(grouping_df)) \
             .filter(col("row_no") == 1).drop('row_no')
         return deduplicate_df
-
 
     def run(self, asynchronicity):
         df = self.load()

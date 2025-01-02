@@ -16,6 +16,7 @@ class AsyncAPIClient:
                 return await response.json()
 
     async def get_recommendations(ass, data):
+        print("get_recommendations 진입")
         tasks = []
         model_server = os.getenv("MODEL_SERVER")
         model_port = os.getenv("MODEL_PORT")
@@ -28,6 +29,7 @@ class AsyncAPIClient:
         results = []
         for ml_mapping, task in tasks:
             result = await task
+            print(result)
             results.append({"ml_mapping_id": ml_mapping, "recommendations": result})
 
         return results
