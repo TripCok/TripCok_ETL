@@ -7,6 +7,7 @@ import pyspark.sql.types as T
 from pyspark.sql import DataFrame, Window
 
 from py.common.SparkSess import SessionGen
+from py.common.etl_utils import check_s3_folder_exists
 
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +42,7 @@ class TopApplicationGroups:
 
         return df
 
-    def proccess(self, df: DataFrame):
+    def process(self, df: DataFrame):
         # Request 의 schema 정의
         request_schema = T.StructType([
             T.StructField("memberId", T.IntegerType(), True),
@@ -70,7 +71,7 @@ class TopApplicationGroups:
 
     def write(self, df):
         logging.info("쓰기 작업 시작")
-        if self.check_s3_folder_exists():
+        if check_s3_folder_exists(self.bucket_name, self.out_path):
             logging.info(f"S3 폴더가 이미 존재 합니다. : {self.out_path}")
             df = self.deduplicate(df)
 
@@ -82,19 +83,11 @@ class TopApplicationGroups:
 
         origin_df = self.spark.read.parquet(origin_read_path)
 
-        print("========== READ ORIGIN DATAFRAME SHOW ==========")
-        origin_df.show(5)
-
         union_df = origin_df.union(new_df)
         grouping_df = Window.partitionBy("group_id", "cre_dtm").orderBy(F.desc("etl_dtm"))
         deduplicate_df = union_df.withColumn('row_no', F.row_number().over(grouping_df)) \
             .filter(F.col("row_no") == 1).drop('row_no')
         return deduplicate_df
-
-    def check_s3_folder_exists(self):
-        s3 = boto3.client('s3')
-        response = s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.out_path, Delimiter='/')
-        return 'Contents' in response or 'CommonPrefixes' in response
 
 
 def parse_arguments():
@@ -108,4 +101,4 @@ if __name__ == "__main__":
     args = parse_arguments()
     tag = TopApplicationGroups(args.date)
     read_df = tag.read()
-    proccess = tag.proccess(read_df)
+    proccess = tag.process(read_df)
