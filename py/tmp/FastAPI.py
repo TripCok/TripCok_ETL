@@ -2,7 +2,7 @@ import os
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import to_timestamp, col
 from pyspark.sql.types import IntegerType, StringType, TimestampType, DoubleType, LongType
-
+from common.parquet2db import S3
 # 입력값 {memberId: 1}
 # 반환값 {placeId : 1, imagePath : str, contentId : str}
 # 형한테 API
@@ -43,28 +43,31 @@ df = spark.read.jdbc(
     properties=properties
 )
 
-df = df.dropna()
-# ml_mapping_id가 숫자인 값만 필터링 (정규식을 사용하여 숫자인 값만 필터링)
-df_filtered = df.filter(col("ml_mapping_id").rlike("^[0-9]+$"))
+df_image = spark.read.jdbc(
+    url=jdbc_url,
+    table="place_image",
+    properties=properties
+)
 
-# ml_mapping_id를 Integer로 변환할 수 있으면 변환하고, 불가능한 경우에는 null로 처리
-df_cleaned = df_filtered.withColumn("ml_mapping_id", col("ml_mapping_id").cast("int"))
 
-#df_cleaned.show()
-df_cleaned = df_cleaned.drop("ml_mapping_id")
-df_cleaned.show()
-# # 나머지 컬럼들을 적절한 데이터 타입으로 변환
-# df = df.withColumn("ml_mapping_id", df["ml_mapping_id"].cast(IntegerType())) \
-#     .withColumn("create_time", df["create_time"].cast(TimestampType())) \
-#     .withColumn("id", df["id"].cast(LongType())) \
-#     .withColumn("update_time", df["update_time"].cast(TimestampType())) \
-#     .withColumn("address", df["address"].cast(StringType())) \
-#     .withColumn("latitude", df["latitude"].cast(DoubleType())) \
-#     .withColumn("longitude", df["longitude"].cast(DoubleType())) \
-#     .withColumn("name", df["name"].cast(StringType())) \
-#     .withColumn("description", df["description"].cast(StringType()))
-#
-# df_cleaned = df.filter(df["ml_mapping_id"].isNotNull())
+#df = df_image의 id와 df의 id를 기준으로 조인하기
 
-#
-# df.show()
+# recommend_df = S3에서 memberId 기준으로 추출하기 input (S3_path, sql 쿼리로)
+s3 = S3(spark)
+memberId=5
+
+table_name = "place"
+query = f" SELECT * FROM {table_name} WHERE memberId = {memberId} "
+s3_base_path ="s3a://tripcok/processed_data"
+partitioned_column ="cre_dtm"
+date = "2025-01-01"
+df = s3.read(s3_base_path, partitioned_column, date, query, table_name)
+# df 와 recommend id 기준으로 join하기
+
+# 출력하기
+
+df.show()
+
+#결과적으로 보내줘야 하는 거
+# 입력값 {memberId: 1}
+# 반환값 {placeId : 1, imagePath : str, contentId : str}
