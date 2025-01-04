@@ -105,7 +105,49 @@ class JDBC:
             combined_data = combined_data.union(df)
 
         self.create(combined_data, "tripcok_db", f"{table_name}")
-        return combined_dataw
+        self.read("tripcok_db", f"{table_name}").show()
+        return combined_data
+
+class S3:
+    def __init__(self, spark_session: SparkSession):
+        self.spark = spark_session
+
+    def read(self, s3_base_path: str, partitioned_column: str, date: str, query: str, table_name: str):
+
+        s3_path = f"{s3_base_path}/{partitioned_column}={date}/"
+
+        df = self.spark.read.parquet(s3_path)
+
+        # 임시 뷰 생성
+        df.createOrReplaceTempView(f"{table_name}")
+
+        # 쿼리 실행
+        filtered_df = self.spark.sql(query)
+
+        return filtered_df
+
+
+    def readForPeriod(self, s3_base_path : str, partitioned_column : str, start_date : str, period : int ):
+
+        execute_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+
+        date_range = [(execute_date_obj - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(period)]
+
+        s3_paths = [f"{s3_base_path}/{partitioned_column}={date}/" for date in date_range]
+
+        dataframes = [self.spark.read.parquet(path) for path in s3_paths]
+
+        # 만약 cre_dtm이 누락되었다면 추가
+        for i, date in enumerate(date_range):
+            dataframes[i] = dataframes[i].withColumn("cre_dtm", lit(date))
+
+        combined_data = dataframes[0]
+
+        # 데이터프레임 결합
+        for df in dataframes[1:]:
+            combined_data = combined_data.union(df)
+
+        return combined_data
 
 
 # 실행 예제

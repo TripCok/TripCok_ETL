@@ -7,7 +7,6 @@ import time
 import asyncio
 import argparse
 from datetime import datetime
-from common.parquet2db import JDBC
 
 
 from pyspark.sql.window import Window
@@ -78,8 +77,8 @@ class MemberPlaceRecommend():
             col("*"),  # 기존 모든 칼럼
             col("parsed_response.id").alias("id"),
             col("cre_dtm"),
-            col("etl_dtm")
-            #col("parsed_response.name").alias("name"),
+            col("etl_dtm"),
+            col("parsed_response.name").alias("name"),
             #col("parsed_response.categoryNames").alias("categoryNames")
         ).drop("parsed_response").drop("response").drop("clientIp").drop("url")
         .drop("requestParam").drop("request").drop("statusCode").drop("time"))
@@ -88,7 +87,7 @@ class MemberPlaceRecommend():
         ml_map_df = ml_map_df.filter(col("id").cast("int").isNotNull())
         ml_map_df = (ml_map_df.select(
             col("id").alias("id"),
-            #col("name").alias("name"),
+            #col("placeName").alias("name"),
             col("ml_mapping_id").alias("ml_mapping_id"),
             #col("address").alias("address"),
         ).drop("latitude").drop("longitude").drop("time").drop("create_time").drop("update_time"))
@@ -96,6 +95,7 @@ class MemberPlaceRecommend():
         #ml_map_df.show(n=10, truncate=False)
 
         joined_df = df.join(ml_map_df, on="id", how="inner")
+        joined_df.show(truncate=False)
 
         #joined_df.show()
         # 윈도우 정의
@@ -111,12 +111,10 @@ class MemberPlaceRecommend():
         # rank가 1인 행만 필터링
         top_counts_df = ranked_df.filter(col("rank") == 1).select("memberId", "ml_mapping_id", "counts")
 
-        #top_counts_df.show()
+        top_counts_df.show()
 
-        result_df = top_counts_df.join(joined_df.select("traceId", "memberId", "ml_mapping_id", "etl_dtm","cre_dtm"),
+        result_df = top_counts_df.join(joined_df.select("traceId", "memberId", "ml_mapping_id", "etl_dtm","cre_dtm","name"),
                                        on=["memberId", "ml_mapping_id"], how="left").orderBy("traceId")
-
-        #result_df.show(truncate=False)
 
         result_df = result_df.dropDuplicates(["memberId", "ml_mapping_id"])
 
@@ -172,7 +170,7 @@ class MemberPlaceRecommend():
         response = s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.output_path, Delimiter='/')
         return 'Contents' in response or 'CommonPrefixes' in response
 
-    def write(self, df, date):
+    def write(self, df):
 
         # AWS 데이터가 있는지 없는지 검증
         if self.check_s3_folder_exists():
@@ -195,6 +193,11 @@ class MemberPlaceRecommend():
         df.show(n =10,truncate=False)
         processed_df = self.process(asynchronicity,df)
         self.write(processed_df)
+        jdbc =JDBC(self.spark)
+
+        if datetime.strptime(self.execute_date, "%Y-%m-%d") >= datetime(2025, 1, 3):
+            print("storeDataForPeriod 진입")
+            jdbc.storeDataForPeriod(self.output_path, "cre_dtm", self.execute_date,7, "memberPlaceRecommend")
 
 def parse_arguments():
     """
@@ -207,7 +210,7 @@ def parse_arguments():
 if __name__ == "__main__":
     try:
         # 실행 인자 설정
-        args = parse_arguments()  # 실제 실행 시 argparse 등으로 동적으로 설정 가능
+        args = parse_arguments()
         etl_job = MemberPlaceRecommend(args.date)
         ass = AsyncAPIClient()
         etl_job.run(ass)
