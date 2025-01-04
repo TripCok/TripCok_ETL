@@ -105,6 +105,7 @@ class JDBC:
             combined_data = combined_data.union(df)
 
         self.create(combined_data, "tripcok_db", f"{table_name}")
+        self.read("tripcok_db", f"{table_name}").show()
         return combined_data
 
 class S3:
