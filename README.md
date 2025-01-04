@@ -1,19 +1,78 @@
-README
+# ETL 파이프 라인
+# 목차
+1. [Json 로그 Parquet로 클랜징 파이프라인](#json-로그-parquet로-클랜징-파이프라인)
+2. [생성된 그룹 수 집계 파이프라인](#생성된-그룹-수-집계-파이프라인)
+3. [모임별 신청 횟수 집계 파이프라인](#모임별-신청-횟수-집계-파이프라인)
 
-### 
-LogsCleansing 사용법
-```bash
-$ python LogsCleansing.py --bucket tripcok --folder topics/tripcoklogs --date 20241220
+# Json 로그 Parquet로 클랜징 파이프라인
 
-$ python LogsCleansing.py --help
-usage: LogsCleansing.py [-h] [--bucket BUCKET] --folder FOLDER --date DATE
+`LogsCleansing` 클래스는 S3 버킷에 저장된 로그 데이터를 정제하는 역할을 합니다. Apache Spark를 사용하여 데이터를 읽고, 처리하고, 저장합니다.
 
-Logs Cleansing Pipeline
+## 주요 기능
 
-options:
-  -h, --help       show this help message and exit
-  --bucket BUCKET  S3 bucket name
-  --folder FOLDER  S3 folder path (prefix)
-  --date DATE      Execution date (YYYYMMDD)
+- **읽기**: S3 버킷에서 로그 데이터를 가져옵니다.
+- **처리**: URL 정제, 컬럼 생성, ETL 타임스탬프 추가.
+- **쓰기**: 처리된 데이터를 S3에 저장하고 중복을 방지합니다.
 
-```
+## 클래스 구조
+
+- **초기화**: `bucket_name`, `folder_path`, `execute_date`로 초기화. Spark 세션과 S3 클라이언트 설정.
+- **메서드**:
+  - `get_schema()`: JSON 데이터 스키마 정의.
+  - `classify_url_by_last_token_udf(url)`: URL 정제.
+  - `load_files()`: S3에서 JSON 파일 목록 가져오기.
+  - `process_file(paths)`: 파일 읽기 및 URL 정제.
+  - `write(df)`: DataFrame 저장 및 중복 제거.
+  - `deduplicate(new_df)`: 중복 항목 제거.
+  - `check_s3_folder_exists()`: S3 폴더 존재 확인.
+  - `run()`: 파이프라인 실행.
+
+## 사용법
+
+스크립트 실행 시 필수 인자를 제공해야 합니다.
+
+# 생성된 그룹 수 집계 파이프라인
+
+`CreatedGroupCounting` 클래스는 특정 날짜에 생성된 그룹 수를 집계합니다. Apache Spark를 사용하여 데이터를 읽고, 처리하고, 저장합니다.
+
+## 주요 기능
+
+- **읽기**: S3에서 데이터를 가져와 날짜, URL, 메서드로 필터링.
+- **처리**: 성공적인 그룹 생성 이벤트 필터링 및 ETL 타임스탬프 업데이트.
+- **쓰기**: 처리된 데이터를 S3에 저장하고 중복을 방지합니다.
+
+## 클래스 구조
+
+- **초기화**: `process_date`로 초기화. Spark 세션과 S3 클라이언트 설정.
+- **메서드**:
+  - `read()`: S3에서 Parquet 데이터를 읽고, 날짜, URL, 메서드로 필터링.
+  - `process(df: DataFrame)`: 201 상태 코드로 성공적인 그룹 생성 이벤트를 필터링하고 ETL 타임스탬프를 업데이트.
+  - `write(df: DataFrame)`: 처리된 DataFrame을 S3에 저장하고 중복을 제거.
+  - `deduplicate(new_df)`: 중복 항목 제거를 통해 최신 데이터를 유지.
+
+## 사용법
+
+스크립트 실행 시 필수 날짜 인자를 제공해야 하며, 이 인자는 집계할 그룹 생성 이벤트의 날짜를 지정합니다.
+
+# 모임별 신청 횟수 집계 파이프라인
+
+`TopApplicationGroups` 클래스는 특정 날짜에 모임별 신청 횟수를 집계합니다. Apache Spark를 사용하여 데이터를 읽고, 처리하고, 저장합니다.
+
+## 주요 기능
+
+- **읽기**: S3에서 데이터를 가져와 날짜, URL, 메서드로 필터링.
+- **처리**: 요청 데이터를 파싱하여 모임별로 신청 횟수를 집계하고 ETL 타임스탬프를 추가합니다.
+- **쓰기**: 처리된 데이터를 S3에 저장하고 중복을 방지합니다.
+
+## 클래스 구조
+
+- **초기화**: `process_date`로 초기화. Spark 세션과 S3 클라이언트 설정.
+- **메서드**:
+  - `read()`: S3에서 Parquet 데이터를 읽고, 날짜, URL, 메서드로 필터링.
+  - `process(df: DataFrame)`: 요청 데이터를 파싱하여 모임별로 신청 횟수를 집계하고 ETL 타임스탬프를 추가.
+  - `write(df: DataFrame)`: 처리된 DataFrame을 S3에 저장하고 중복을 제거.
+  - `deduplicate(new_df)`: 중복 항목 제거를 통해 최신 데이터를 유지.
+
+## 사용법
+
+스크립트 실행 시 필수 날짜 인자를 제공해야 하며, 이 인자는 집계할 모임별 신청 횟수의 날짜를 지정합니다.
