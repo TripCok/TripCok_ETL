@@ -51,12 +51,20 @@ async def get_recommendations(memberId: int):
 
         # memberId 기준으로 필터링
         filtered_df = df.filter(col("memberId") == memberId)
-
+        filtered_df.show()
         # 필요한 컬럼 선택
-        result_df = filtered_df.select("ml_mapping_id", "cid", "score")
+        result_df = filtered_df.select("cid", "score")
 
         # 결과를 딕셔너리로 변환
         result = [row.asDict() for row in result_df.collect()]
+
+        if filtered_df.isEmpty():
+            print("진입")
+            df.show()
+            df = df.dropna(subset=['cid', 'score'])
+            most_recommend_df = df.groupby('ml_mapping').reset_index(name='count').sort_values(by='count', ascending=False).head(5)
+            result = [row.asDict() for row in most_recommend_df.collect()]
+            return {"memberId": memberId, "recommendations": result}
 
         return {"memberId": memberId, "recommendations": result}
 
