@@ -56,8 +56,43 @@ async def get_recommendations(memberId: int):
         result_df = filtered_df.select("cid", "score")
         result_df.show(n=100, truncate=False)
 
+        # """
+        # db에 요청
+        # """
+        jdbc_url = "jdbc:mysql://54.180.151.205:3366/tripcok_db"
+        properties = {
+            "user": "tripcok",
+            "password": "tripcok1234"
+        }
+
+        df = spark.read.jdbc(
+            url=jdbc_url,
+            table="place",
+            properties=properties
+        )
+
+        image_df = spark.read.jdbc(
+            url=jdbc_url,
+            table="place_image",
+            properties=properties
+        )
+        print("1")
+        df = result_df.alias('r').join(
+            df.alias('d'), result_df.cid == df.ml_mapping_id, 'left'
+        ).select(
+            'r.cid', 'd.name', 'd.id', 'r.score'  # 원하는 컬럼만 선택
+        )
+        print("2")
+
+        df = image_df.alias('i').join(df.alias('d'), image_df['id'] == df['id'], 'inner').select('d.cid','i.image_path','d.name', 'd.score', 'd.id')
+        print("3")
+        df.show()
+        df = df.select("d.id","d.cid","d.score","i.image_path")
+        df.show()
+
         # 결과를 딕셔너리로 변환
-        result = [row.asDict() for row in result_df.collect()]
+        result = [row.asDict() for row in df.collect()]
+
 
         if filtered_df.isEmpty():
             print("진입")
