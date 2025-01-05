@@ -127,14 +127,26 @@ class TopGroupCategories:
         origin_read_path = f"s3a://{self.bucket_name}/{self.out_path}/"
         origin_df = self.spark.read.parquet(origin_read_path)
 
+        logging.info("======= ORIGIN DF =======")
+        origin_df.show()
+
         origin_df = origin_df.withColumn("etl_dtm", F.col("etl_dtm").cast("timestamp"))
         new_df = new_df.select("category_id", "category_name", "count", "etl_dtm", "cre_dtm")
 
         union_df = origin_df.union(new_df)
 
-        grouping_df = Window.partitionBy("cre_dtm").orderBy(F.desc("etl_dtm"))
+        logging.info("======= UNION DF =======")
+        union_df.show()
+
+        grouping_df = Window.partitionBy("category_id").orderBy(F.desc("etl_dtm"))
+        logging.info("======= GROUPING DF =======")
+
         deduplicate_df = union_df.withColumn('row_no', F.row_number().over(grouping_df)) \
             .filter(F.col("row_no") == 1).drop('row_no')
+
+        logging.info("======= DEDUPLICATE DF =======")
+        deduplicate_df.show()
+
         return deduplicate_df
 
 
