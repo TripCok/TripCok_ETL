@@ -63,7 +63,7 @@ class MemberPlaceRecommend():
         """
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(current_dir, "saved_5.csv")
+        file_path = os.path.join(current_dir, "place.csv")
 
         ml_map_df = self.spark.read.option("header", "true").csv(file_path)
         df = self.spark.read.parquet(self.s3_path)
@@ -178,7 +178,7 @@ class MemberPlaceRecommend():
         place 관련 정보 업데이트
         """
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(current_dir, "saved_5.csv")
+        file_path = os.path.join(current_dir, "place.csv")
         ml_map_df = self.spark.read.option("header", "true").csv(file_path)
         joined_df = normalized_df.join(ml_map_df, normalized_df.cid == ml_map_df.ml_mapping_id, how="left_outer")
         joined_df.show(truncate=False)
