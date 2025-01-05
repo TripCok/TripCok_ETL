@@ -63,7 +63,7 @@ class MemberPlaceRecommend():
         """
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(current_dir, "place.csv")
+        file_path = os.path.join(current_dir, "saved_5.csv")
 
         ml_map_df = self.spark.read.option("header", "true").csv(file_path)
         df = self.spark.read.parquet(self.s3_path)
@@ -153,9 +153,9 @@ class MemberPlaceRecommend():
         results_df.show(truncate=False)
         exploded_df = results_df.select(col("memberId"),explode(col("recommendations")).alias("result_map"))
         normalized_df = exploded_df.select(col("memberId"),explode(col("result_map")).alias("cid", "score"))
-        normalized_df = normalized_df.join(df, on="memberId", how="left")
+        normalized_df = normalized_df.join(df, on="memberId", how="left_outer")
         normalized_df =normalized_df.orderBy("memberId","cid")
-        normalized_df.show(truncate=False)
+        normalized_df.show(n=100, truncate=False)
         """
         trace_id 고유화한 값으로 변경
         """
@@ -178,9 +178,9 @@ class MemberPlaceRecommend():
         place 관련 정보 업데이트
         """
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(current_dir, "place.csv")
+        file_path = os.path.join(current_dir, "saved_5.csv")
         ml_map_df = self.spark.read.option("header", "true").csv(file_path)
-        joined_df = normalized_df.join(ml_map_df, normalized_df.cid == ml_map_df.ml_mapping_id, how="inner")
+        joined_df = normalized_df.join(ml_map_df, normalized_df.cid == ml_map_df.ml_mapping_id, how="left_outer")
         joined_df.show(truncate=False)
         """
         필요한 칼럼만 추출
@@ -195,7 +195,8 @@ class MemberPlaceRecommend():
             col("name").alias("name"),
         ).drop("ml_mapping_id")
         print("joined_df")
-        joined_df.show(truncate=False)
+        joined_df = joined_df.orderBy("memberId","cid")
+        joined_df.show(n=100,truncate=False)
         joined_df.printSchema()
 
         return joined_df

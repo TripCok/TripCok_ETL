@@ -54,6 +54,7 @@ async def get_recommendations(memberId: int):
         filtered_df.show()
         # 필요한 컬럼 선택
         result_df = filtered_df.select("cid", "score")
+        result_df.show(n=100, truncate=False)
 
         # 결과를 딕셔너리로 변환
         result = [row.asDict() for row in result_df.collect()]
