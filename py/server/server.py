@@ -43,12 +43,12 @@ async def get_recommendations(memberId: int):
     """
     s3_base_path = "s3a://tripcok/processed_data"
     partitioned_column = "cre_dtm"
-    date = "2025-01-01"
+    date = "2025-01-03"
 
     try:
         # S3 데이터 읽기
         df = s3.read(s3_base_path, partitioned_column, date)
-
+        df.show()
         # memberId 기준으로 필터링
         filtered_df = df.filter(col("memberId") == memberId)
         filtered_df.show()
@@ -61,7 +61,6 @@ async def get_recommendations(memberId: int):
         if filtered_df.isEmpty():
             print("진입")
             df.show()
-            df = df.dropna(subset=['cid', 'score'])
             most_recommend_df = df.groupby('ml_mapping').reset_index(name='count').sort_values(by='count', ascending=False).head(5)
             result = [row.asDict() for row in most_recommend_df.collect()]
             return {"memberId": memberId, "recommendations": result}
