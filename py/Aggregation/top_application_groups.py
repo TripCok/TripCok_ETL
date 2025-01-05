@@ -82,6 +82,22 @@ class TopApplicationGroups:
             df = self.deduplicate(df)
 
         write_path = f"s3a://{self.bucket_name}/{self.out_path}/"
+
+        logging.info("JDBC로 데이터 저장 시작...")
+        try:
+            df.write \
+                .format("jdbc") \
+                .option("url", os.getenv("AGG_DB_URL")) \
+                .option("dbtable", f"{os.getenv('AGG_DB_SCHEMA')}.top_application_groups") \
+                .option("user", os.getenv("AGG_DB_USER")) \
+                .option("password", os.getenv("AGG_DB_PASSWORD")) \
+                .mode("overwrite") \
+                .save()
+        except Exception as e:
+            logging.error(e)
+            raise e
+        logging.info("JDBC 데이터 저장 완료.")
+
         df.coalesce(5).write.mode("overwrite").partitionBy(self.partition_cols).parquet(write_path)
 
     def deduplicate(self, new_df):
