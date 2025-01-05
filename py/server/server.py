@@ -43,7 +43,7 @@ async def get_recommendations(memberId: int):
     """
     s3_base_path = "s3a://tripcok/processed_data"
     partitioned_column = "cre_dtm"
-    date = "2025-01-02"
+    date = "2025-01-03"
 
     try:
         # S3 데이터 읽기
