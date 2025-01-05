@@ -160,10 +160,10 @@ class MemberPlaceRecommend():
 
     def process(self,asynchronicity, df) -> DataFrame:
         print("process 진입")
-        #api_results = self.fetch_and_save_results(asynchronicity, df)
-        #results_df = self.spark.createDataFrame(api_results)
+        api_results = self.fetch_and_save_results(asynchronicity, df)
+        results_df = self.spark.createDataFrame(api_results)
         #results_df.write.parquet("./result.parquet")
-        results_df = self.spark.read.parquet("./result.parquet/")
+        #results_df = self.spark.read.parquet("./result.parquet/")
 
         """
         FastAPI의 결과물을 반환 받아서 DataFrame 형태로 변환
