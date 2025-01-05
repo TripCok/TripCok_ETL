@@ -88,23 +88,36 @@ class MemberPlaceRecommend():
         ).drop("parsed_response").drop("response").drop("clientIp").drop("url")
         .drop("requestParam").drop("request").drop("statusCode").drop("time"))
 
+        """
+        로그의 place id와 ml_mapping_id완 매칭하기 위함
+        
+        """
+
         #df.show(n=10, truncate=False)
         ml_map_df = ml_map_df.filter(col("id").cast("int").isNotNull())
         ml_map_df.show(n=10, truncate=False)
 
         ml_map_df = (ml_map_df.select(
             col("id").alias("id"),
-            #col("placeName").alias("name"),
             col("ml_mapping_id").alias("ml_mapping_id"),
-            #col("address").alias("address"),
         ).drop("latitude").drop("longitude").drop("time").drop("create_time").drop("update_time"))
 
         #ml_map_df.show(n=10, truncate=False)
+
+        """
+         df와 ml_map_df 매칭
+        """
 
         joined_df = df.join(ml_map_df, on="id", how="inner")
         joined_df.show(truncate=False)
 
         #joined_df.show()
+
+
+        """
+        회원 당 가장 많이 검색한 여행지 추려내기
+        """
+
         # 윈도우 정의
         window_spec = Window.partitionBy("memberId").orderBy(col("counts").desc())
 
@@ -119,6 +132,10 @@ class MemberPlaceRecommend():
         top_counts_df = ranked_df.filter(col("rank") == 1).select("memberId", "ml_mapping_id", "counts")
 
         top_counts_df.show()
+
+        """
+        회원별의 place_id와 mL_mapping_id와 연동
+        """
 
         result_df = top_counts_df.join(joined_df.select("traceId", "memberId", "ml_mapping_id", "etl_dtm","cre_dtm","id"),
                                        on=["memberId", "ml_mapping_id"], how="left").orderBy("traceId")
