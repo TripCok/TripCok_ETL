@@ -34,6 +34,7 @@ class MemberPlaceRecommend():
         self.s3_path = f"s3a://tripcok/dm/cleansing_data/cre_dtm={execute_date}/url_part=_api_v1_place_/method=GET/"
         self.spark = SessionGen().create_session(app_name="member_place_recommend", local=False)
         self.output_path = f"s3a://tripcok/processed_data/"
+        self.prefix = f"processed_data"
         self.partition_cols = ["cre_dtm"]
         self.bucket_name = "tripcok"
 
@@ -159,10 +160,10 @@ class MemberPlaceRecommend():
 
     def process(self,asynchronicity, df) -> DataFrame:
         print("process 진입")
-        api_results = self.fetch_and_save_results(asynchronicity, df)
-        results_df = self.spark.createDataFrame(api_results)
+        #api_results = self.fetch_and_save_results(asynchronicity, df)
+        #results_df = self.spark.createDataFrame(api_results)
         #results_df.write.parquet("./result.parquet")
-        #results_df = self.spark.read.parquet("./result.parquet/")
+        results_df = self.spark.read.parquet("./result.parquet/")
 
         """
         FastAPI의 결과물을 반환 받아서 DataFrame 형태로 변환
@@ -219,25 +220,36 @@ class MemberPlaceRecommend():
         return joined_df
 
 
-    def check_s3_folder_exists(self):
+    def delete_file(self):
         s3 = boto3.client('s3')
-        response = s3.list_objects_v2(Bucket=self.bucket_name, Prefix=self.output_path, Delimiter='/')
-        return 'Contents' in response or 'CommonPrefixes' in response
+        response = s3.list_objects_v2(Bucket=f"{self.bucket_name}", Prefix=f"processed_data/cre_dtm={self.execute_date}")
+        print(response)
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                print(f"Deleting: {obj['Key']}")
+                delete_response = s3.delete_object(Bucket=f"{self.bucket_name}", Key=obj['Key'])
+                print(f"Delete Response: {delete_response}")
+
+        time.sleep(5)
+
+        response = s3.list_objects_v2(Bucket="tripcok", Prefix=f"processed_data/cre_dtm={self.execute_date}", Delimiter='/')
+        print('Contents' in response or 'CommonPrefixes' in response)
 
     def write(self, df):
 
         # # AWS 데이터가 있는지 없는지 검증
-        if self.check_s3_folder_exists():
-            self.deduplicate(df)
+        # if self.check_s3_folder_exists():
+        #     self.deduplicate(df)
+        self.delete_file()
 
         # Parquet 형식으로 저장 (url_method로 파티셔닝, 5개의 파티션)
         df.coalesce(5).write.mode("append").partitionBy(self.partition_cols).parquet(self.output_path)
 
     def deduplicate(self, new_df):
-        origin_df = self.spark.read.parquet(self.output_path)
-
+        origin_df = self.spark.read.parquet(f"{self.output_path}/cre_dtm={self.execute_date}")
+        origin_df.show(truncate=False)
         union_df = origin_df.union(new_df)
-        grouping_df = Window.partitionBy("memberId").orderBy(col("etl_dtm").desc)
+        grouping_df = Window.partitionBy("memberId").orderBy(col("etl_dtm").desc())
         deduplicate_df = union_df.withColumn('row_no', row_number().over(grouping_df)) \
             .filter(col("row_no") == 1).drop('row_no')
         return deduplicate_df
