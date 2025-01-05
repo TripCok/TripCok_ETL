@@ -1,10 +1,16 @@
 import argparse
 import logging
+import os
+import sys
 
 import boto3
-from pyspark.sql import DataFrame, Window
 import pyspark.sql.functions as F
-import pyspark.sql.types as T
+from pyspark.sql import DataFrame, Window
+
+# 프로젝트 루트 경로를 추가
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+sys.path.append(project_root)
+
 from py.common.SparkSess import SessionGen
 from py.common.etl_utils import check_s3_folder_exists
 
